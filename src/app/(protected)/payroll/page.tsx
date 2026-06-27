@@ -86,7 +86,7 @@ export default function PayrollTable() {
   // ---------- Lunch Settings State ----------
   const [showLunchModal, setShowLunchModal] = useState(false);
   const [enableLunch, setEnableLunch] = useState(false);
-  const [dailyLunchAmount, setDailyLunchAmount] = useState(50); // default ₹50 per day
+  const [dailyLunchAmount, setDailyLunchAmount] = useState(50);
   // -----------------------------------------
 
   // Calculate summary statistics
@@ -261,8 +261,8 @@ export default function PayrollTable() {
       const { data: attendance, error: attError } = await supabase
         .from("attendance")
         .select("*")
-        .gte("date", startDate?.toISOString())
-        .lte("date", endDate?.toISOString());
+        .gte("date", startDate?.toISOString() || '')
+        .lte("date", endDate?.toISOString() || '');
 
       if (empError || attError) throw empError || attError;
 
@@ -286,7 +286,6 @@ export default function PayrollTable() {
         const lwf = Math.round(safe(earning_total_gross) > 12500 ? 31 : safe(earning_total_gross) * 0.002);
         const total_ded = esi_ded + pf + lwf;
 
-        // Lunch calculation based on settings
         const lunch = present;
         const lunch_amount = enableLunch ? present * dailyLunchAmount : 0;
 
@@ -340,21 +339,23 @@ export default function PayrollTable() {
     }
   };
 
-  // Save Payroll to Database
+  // Save Payroll to Database (FIXED: null check for startDate)
   const savePayrollToDatabase = async () => {
     if (filteredPayroll.length === 0) {
       toast.warning("No payroll data to save. Please load data first.");
       return;
     }
 
+    // ✅ Fix: Check if startDate is null
+    if (!startDate) {
+      toast.error("Please select a valid start date.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const monthNum = startDate?.getMonth() + 1;
-      const yearNum = startDate?.getFullYear();
-      if (!monthNum || !yearNum) {
-        toast.error("Invalid date range selected.");
-        return;
-      }
+      const monthNum = startDate.getMonth() + 1;   // now safe
+      const yearNum = startDate.getFullYear();
       const monthStr = `${yearNum}-${String(monthNum).padStart(2, '0')}`;
 
       const rows = filteredPayroll.map(row => ({
@@ -373,7 +374,7 @@ export default function PayrollTable() {
         net_payable: row.net_payable,
         days_present: row.days,
         days_in_month: new Date(yearNum, monthNum, 0).getDate(),
-        lunch_amount: row.lunch_amount,   // updated
+        lunch_amount: row.lunch_amount,
         total_amount: row.total_amount,
         total_ded: row.total_ded
       }));
@@ -422,7 +423,6 @@ export default function PayrollTable() {
   // Also re-fetch when lunch settings change (so the UI updates)
   useEffect(() => {
     if (payroll.length > 0) {
-      // Re-run fetchData to reflect new lunch settings
       fetchData();
     }
   }, [enableLunch, dailyLunchAmount]);
@@ -652,7 +652,6 @@ export default function PayrollTable() {
                   onClick={() => {
                     setShowLunchModal(false);
                     toast.success("Lunch settings updated. Refresh data to apply.");
-                    // Optionally re-fetch to apply changes instantly
                     fetchData();
                   }}
                   className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
