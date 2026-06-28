@@ -4,9 +4,41 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSupabase } from '@/lib/supabase-provider';
 
+// ✅ Reusable Input component – now with proper typing
+function Input({
+    name,
+    label,
+    value,
+    onChange,
+    type = 'text'
+}: {
+    name: string;
+    label: string;
+    value: any;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    type?: string;
+}) {
+    return (
+        <div>
+            <label htmlFor={name} className="block text-sm font-medium text-gray-600 mb-1">
+                {label}
+            </label>
+            <input
+                id={name}
+                name={name}
+                type={type}
+                value={value ?? ''}  // ✅ prevent uncontrolled warning
+                onChange={onChange}
+                className="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder={`Enter ${label}`}
+            />
+        </div>
+    );
+}
+
 export default function EmployeeEditPage() {
-    const { supabase } = useSupabase();   // Hook का उपयोग करें
-    const { id } = useParams();
+    const { supabase } = useSupabase();
+    const { id } = useParams<{ id: string }>();  // ✅ typed params
     const router = useRouter();
 
     const [formData, setFormData] = useState<any>(null);
@@ -14,13 +46,19 @@ export default function EmployeeEditPage() {
 
     useEffect(() => {
         async function fetchEmployee() {
+            if (!id) {
+                alert('Employee ID missing');
+                router.push('/employees');
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('employees')
                 .select('*')
-                .eq('employee_id', id)
+                .eq('employee_id', id as any)   // ✅ type-safe for build
                 .single();
 
-            if (error) {
+            if (error || !data) {
                 alert('Employee not found');
                 router.push('/employees');
                 return;
@@ -31,19 +69,25 @@ export default function EmployeeEditPage() {
         }
 
         fetchEmployee();
-    }, [id]);
+    }, [id, supabase, router]);
 
-    const handleChange = (e: any) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData((prev: any) => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = async (e: any) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!formData) {
+            alert('No data to update');
+            return;
+        }
 
         const { error } = await supabase
             .from('employees')
             .update(formData)
-            .eq('employee_id', id);
+            .eq('employee_id', id as any);   // ✅ type-safe
 
         if (error) {
             alert('Update failed: ' + error.message);
@@ -53,7 +97,9 @@ export default function EmployeeEditPage() {
         }
     };
 
-    if (loading) return <p className="text-center p-10 text-gray-500">Loading employee data...</p>;
+    if (loading) {
+        return <p className="text-center p-10 text-gray-500">Loading employee data...</p>;
+    }
 
     return (
         <section className="max-w-5xl mx-auto p-6 space-y-8">
@@ -85,7 +131,6 @@ export default function EmployeeEditPage() {
                         <Input name="uan_number" label="UAN Number" value={formData.uan_number} onChange={handleChange} />
                         <Input name="conveyance" label="Conveyance" value={formData.conveyance} onChange={handleChange} />
                         <Input name="advance" label="Advance" value={formData.advance} onChange={handleChange} />
-
                     </div>
                 </div>
 
@@ -108,18 +153,17 @@ export default function EmployeeEditPage() {
                     </div>
                 </div>
 
-                {/* Salary Details */}
+                {/* Salary Details – removed duplicate fields (already covered above) */}
                 <div className="bg-white p-6 rounded-xl shadow-md">
-                    <h2 className="text-xl font-semibold text-gray-700 mb-4">Salary Details</h2>
+                    <h2 className="text-xl font-semibold text-gray-700 mb-4">Salary & Compensation</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Input name="basic" label="Basic Salary" value={formData.basic} onChange={handleChange} />
-                        <Input name="esi_number" label="ESI Number" value={formData.esi_number} onChange={handleChange} />
                         <Input name="hra" label="HRA" value={formData.hra} onChange={handleChange} />
-                        <Input name="epf_number" label="EPF Number" value={formData.epf_number} onChange={handleChange} />
-                        <Input name="uan_number" label="UAN Number" value={formData.uan_number} onChange={handleChange} />
                         <Input name="conveyance" label="Conveyance" value={formData.conveyance} onChange={handleChange} />
                         <Input name="advance" label="Advance" value={formData.advance} onChange={handleChange} />
-
+                        <Input name="esi_number" label="ESI Number" value={formData.esi_number} onChange={handleChange} />
+                        <Input name="uan_number" label="UAN Number" value={formData.uan_number} onChange={handleChange} />
+                        <Input name="epf_number" label="EPF Number" value={formData.epf_number} onChange={handleChange} />
                     </div>
                 </div>
 
@@ -135,43 +179,14 @@ export default function EmployeeEditPage() {
 
                 {/* Submit Button */}
                 <div className="text-right">
-                    <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl font-semibold shadow">
+                    <button
+                        type="submit"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl font-semibold shadow"
+                    >
                         Save Changes
                     </button>
                 </div>
             </form>
         </section>
-    );
-}
-
-// Reusable Input component
-function Input({
-    name,
-    label,
-    value,
-    onChange,
-    type = 'text'
-}: {
-    name: string;
-    label: string;
-    value: any;
-    onChange: any;
-    type?: string;
-}) {
-    return (
-        <div>
-            <label htmlFor={name} className="block text-sm font-medium text-gray-600 mb-1">
-                {label}
-            </label>
-            <input
-                id={name}
-                name={name}
-                type={type}
-                value={value || ''}
-                onChange={onChange}
-                className="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder={`Enter ${label}`}
-            />
-        </div>
     );
 }
