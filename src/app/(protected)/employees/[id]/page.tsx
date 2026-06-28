@@ -26,7 +26,7 @@ export default async function Page({
     const { data, error } = await supabase
         .from("employees")
         .select("*")
-        .eq("employee_id", id)
+        .eq("employee_id", id as string)
         .single();
 
     if (error || !data) {
