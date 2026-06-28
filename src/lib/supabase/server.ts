@@ -4,5 +4,10 @@ import { Database } from '../types/supabase'
 
 export const createClient = () => {
   const cookieStore = cookies()
-  return createServerComponentClient<Database>({ cookies: () => cookieStore })
+  return createServerComponentClient<Database>({
+    cookies: () => cookieStore,
+    // ✅ इन दो लाइनों को जोड़ें – Build Time पर Env Variables Explicitly पास करें
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  })
 }

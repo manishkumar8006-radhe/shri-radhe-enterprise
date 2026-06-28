@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import supabase from '@/lib/supabase';
+import { useSupabase } from '@/lib/supabase-provider';
 
 export default function EmployeeEditPage() {
+    const { supabase } = useSupabase();   // Hook का उपयोग करें
     const { id } = useParams();
     const router = useRouter();
 
