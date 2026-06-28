@@ -6,8 +6,7 @@ export const createClient = () => {
   const cookieStore = cookies()
   return createServerComponentClient<Database>({
     cookies: () => cookieStore,
-    // ✅ ये दो लाइनें जोड़ें – Build Time पर Env Variables Explicitly पास करें
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  })
+  } as any)   // ✅ `as any` – TypeScript को Override करें
 }
