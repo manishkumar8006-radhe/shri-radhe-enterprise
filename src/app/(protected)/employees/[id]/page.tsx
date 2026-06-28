@@ -26,27 +26,30 @@ export default async function Page({
     const { data, error } = await supabase
         .from("employees")
         .select("*")
-        .eq("employee_id", id as any)   // ✅ `as any` डालें – Type Checking Override
+        .eq("employee_id", id as any)   // ✅ `as any` – Type Checking Override
         .single();
 
     if (error || !data) {
         notFound();
     }
 
+    // ✅ This line fixes the TypeScript error: cast data to any
+    const employee = data as any;
+
     return (
         <div className="p-6">
             <h1 className="text-2xl font-bold mb-4">Employee Details</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <p><strong>ID:</strong> {data.employee_id}</p>
-                    <p><strong>Name:</strong> {data.employee_name}</p>
-                    <p><strong>Department:</strong> {data.department}</p>
-                    <p><strong>Designation:</strong> {data.designation}</p>
+                    <p><strong>ID:</strong> {employee.employee_id}</p>
+                    <p><strong>Name:</strong> {employee.employee_name}</p>
+                    <p><strong>Department:</strong> {employee.department}</p>
+                    <p><strong>Designation:</strong> {employee.designation}</p>
                 </div>
                 <div>
-                    <p><strong>ESI Number:</strong> {data.esi_number}</p>
-                    <p><strong>UAN Number:</strong> {data.uan_number}</p>
-                    <p><strong>Joining Date:</strong> {new Date(data.joining_date).toLocaleDateString()}</p>
+                    <p><strong>ESI Number:</strong> {employee.esi_number}</p>
+                    <p><strong>UAN Number:</strong> {employee.uan_number}</p>
+                    <p><strong>Joining Date:</strong> {new Date(employee.joining_date).toLocaleDateString()}</p>
                 </div>
             </div>
         </div>
