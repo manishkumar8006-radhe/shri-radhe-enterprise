@@ -28,7 +28,6 @@ export default function SupabaseProvider({
 }: {
   children: ReactNode;
 }) {
-  console.log('🔍 Supabase URL from env:', process.env.NEXT_PUBLIC_SUPABASE_URL);
   const supabase = createClientComponentClient<Database>();
   const [session, setSession] = useState<Session | null>(null);
   const router = useRouter();
