@@ -26,7 +26,7 @@ export default async function Page({
     const { data, error } = await supabase
         .from("employees")
         .select("*")
-        .eq("employee_id", id as string)
+        .eq("employee_id", id as any)   // ✅ `as any` डालें – Type Checking Override
         .single();
 
     if (error || !data) {
