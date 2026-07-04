@@ -215,16 +215,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          <div className="text-center text-sm text-gray-600">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="text-pink-600 font-medium hover:underline"
-            >
-              Sign up
-            </Link>
-          </div>
         </motion.div>
       </AnimatePresence>
     </div>
