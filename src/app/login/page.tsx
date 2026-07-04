@@ -80,7 +80,7 @@ export default function LoginPage() {
         description: "Redirecting to dashboard...",
       });
 
-      router.push("/dashboard");
+      router.replace("/dashboard");
     } catch {
       toast.error("An unexpected error occurred", {
         description: "Please try again later",
@@ -121,7 +121,11 @@ export default function LoginPage() {
             <p className="text-sm text-gray-700">Secure login panel</p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-5"
+            autoComplete="on"
+          >
             {/* Email Field */}
             <div className="space-y-1">
               <Label htmlFor="email" className="text-gray-800">
@@ -132,6 +136,7 @@ export default function LoginPage() {
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="user@example.com"
                   className="pl-10 bg-white/70 focus:ring-2 ring-pink-400"
                   {...register("email")}
@@ -155,12 +160,14 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  aria-label="Password"
                   placeholder="••••••••"
                   className="pl-10 pr-10 bg-white/70 focus:ring-2 ring-pink-400"
                   {...register("password")}
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-pink-500"
                 >

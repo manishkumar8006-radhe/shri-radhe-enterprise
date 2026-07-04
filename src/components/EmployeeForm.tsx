@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import supabase from "@/lib/supabase";
-
+import { useSupabase } from "@/lib/supabase-provider";
 
 export default function EmployeeForm({
     initialData = null,
@@ -11,6 +10,7 @@ export default function EmployeeForm({
     initialData?: any;
     mode?: "add" | "edit";
 }) {
+    const { supabase } = useSupabase();
     const [formData, setFormData] = useState({
         employee_id: "",
         employee_name: "",
@@ -22,7 +22,7 @@ export default function EmployeeForm({
         department: "",
         designation: "",
         joining_date: "",
-        basic: "",
+        basic_salary: "",
         hra: "",
         conveyance: "",
         advance: "",

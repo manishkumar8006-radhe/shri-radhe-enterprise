@@ -1,39 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import supabase from "@/lib/supabase";
+import { useSupabase } from "@/lib/supabase-provider";
 
 export default function HomeRedirect() {
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+  const { supabase } = useSupabase();
 
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-
       const session = data.session;
 
       if (session?.user) {
-        router.push("/login");
+        router.replace("/dashboard");
       } else {
-        router.push("/dashboard");
+        router.replace("/login");
       }
-
-      setIsChecking(false);
     };
 
     checkSession();
-  }, [router]);
+  }, [router, supabase]);
 
-  // Optional: Show nothing or loading spinner during redirect
-  if (isChecking) {
-    return (
-      <div className="flex items-center justify-center h-screen text-gray-500 text-sm">
-        Checking session...
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <div className="flex items-center justify-center h-screen text-gray-500 text-sm">
+      Redirecting...
+    </div>
+  );
 }
