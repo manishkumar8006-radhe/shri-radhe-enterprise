@@ -9,11 +9,17 @@ export default function HomeRedirect() {
   const { supabase } = useSupabase();
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
+    let isMounted = true;
 
-      if (session?.user) {
+    const checkSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      console.log("SESSION ERROR:", error);
+      console.log("SESSION:", data.session);
+
+      if (!isMounted) return;
+
+      if (data.session?.user) {
         router.replace("/dashboard");
       } else {
         router.replace("/login");
@@ -21,6 +27,26 @@ export default function HomeRedirect() {
     };
 
     checkSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log("AUTH EVENT:", _event);
+      console.log("SESSION (listener):", session);
+
+      if (!isMounted) return;
+
+      if (session?.user) {
+        router.replace("/dashboard");
+      } else {
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [router, supabase]);
 
   return (

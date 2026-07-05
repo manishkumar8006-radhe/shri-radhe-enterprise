@@ -57,10 +57,16 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: loginData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
+
+      console.log("LOGIN ERROR:", error);
+      console.log("LOGIN DATA:", loginData);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("SESSION:", sessionData.session);
 
       if (error) {
         toast.error("Login Failed", {
