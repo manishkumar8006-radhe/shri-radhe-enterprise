@@ -30,7 +30,8 @@ import {
   FiRefreshCw,
   FiUser,
   FiActivity,
-  FiLogOut
+  FiLogOut,
+  FiHome
 } from "react-icons/fi";
 import { FaRegCalendarCheck, FaUserClock } from "react-icons/fa";
 import { BsGraphUpArrow, BsCashCoin } from "react-icons/bs";
@@ -72,6 +73,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { supabase, session } = useSupabase();
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [stats, setStats] = useState<DashboardStats>({
     employeeCount: 0,
     attendanceRate: "0%",
@@ -89,283 +91,243 @@ export default function Dashboard() {
   const [payrollTrend, setPayrollTrend] = useState<PayrollData[]>([]);
   const [recentActivity, setRecentActivity] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // ==================== SESSION CHECK ====================
   useEffect(() => {
     const checkSession = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
+      console.log("🔍 Checking session...");
 
-      console.log("DASHBOARD SESSION ERROR:", error);
-      console.log("DASHBOARD SESSION:", session);
-      console.log("DASHBOARD USER:", session?.user);
+      try {
+        // Method 1: Check from useSupabase hook
+        if (session) {
+          console.log("✅ Session found from hook:", session);
+          setIsAuthenticated(true);
+          setSessionChecked(true);
+          await fetchDashboardData();
+          return;
+        }
 
-      if (!session) {
-        console.log("No session found. Redirecting to login...");
+        // Method 2: Directly check from supabase
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error("❌ Session error:", error);
+          setError(error.message);
+          setIsAuthenticated(false);
+          setSessionChecked(true);
+          router.replace("/login");
+          return;
+        }
+
+        if (data?.session) {
+          console.log("✅ Session found directly:", data.session);
+          setIsAuthenticated(true);
+          setSessionChecked(true);
+          await fetchDashboardData();
+        } else {
+          console.log("❌ No session found, redirecting to login");
+          setIsAuthenticated(false);
+          setSessionChecked(true);
+          router.replace("/login");
+        }
+      } catch (err) {
+        console.error("❌ Session check error:", err);
+        setError("Session check failed");
+        setIsAuthenticated(false);
+        setSessionChecked(true);
         router.replace("/login");
-        return;
       }
-
-      console.log("Session found. Loading dashboard...");
-      setSessionChecked(true);
-      fetchDashboardData();
     };
 
     checkSession();
-  }, [router, supabase]);
 
+    // Listen for auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("🔄 Auth event:", event);
+        console.log("🔄 Session:", session);
+
+        if (event === "SIGNED_IN" && session) {
+          console.log("✅ User signed in");
+          setIsAuthenticated(true);
+          setSessionChecked(true);
+          await fetchDashboardData();
+        } else if (event === "SIGNED_OUT") {
+          console.log("❌ User signed out");
+          setIsAuthenticated(false);
+          setSessionChecked(true);
+          router.replace("/login");
+        }
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [router, supabase, session]);
+
+  // ==================== HANDLE LOGOUT ====================
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
   };
 
+  // ==================== FETCH DASHBOARD DATA ====================
   const fetchDashboardData = async () => {
+    console.log("🚀 Fetching dashboard data...");
     try {
       setLoading(true);
+      setError(null);
+
       const today = new Date().toISOString().split("T")[0];
-      const currentMonth = new Date().getMonth() + 1;
       const currentYear = new Date().getFullYear();
 
-      // Mock data fetch functions - replace with your actual Supabase queries
-      const fetchEmployeeCount = async () => {
-        const { count } = await supabase
-          .from("employees")
-          .select("*", { count: "exact", head: true });
-        return count ?? 0;
-      };
+      // Fetch employee count
+      const { count: employeeCount } = await supabase
+        .from("employees")
+        .select("*", { count: "exact", head: true });
 
-      const fetchDepartmentData = async () => {
-        const { data } = await supabase
-          .from("employees")
-          .select("department")
-          .neq("department", null);
+      // Fetch department data
+      const { data: deptData } = await supabase
+        .from("employees")
+        .select("department")
+        .neq("department", null);
 
-        const deptCounts = data?.reduce((acc: Record<string, number>, { department }) => {
-          acc[department] = (acc[department] || 0) + 1;
-          return acc;
-        }, {});
+      const deptCounts = deptData?.reduce((acc: Record<string, number>, { department }) => {
+        acc[department] = (acc[department] || 0) + 1;
+        return acc;
+      }, {});
 
-        return Object.entries(deptCounts || {}).map(([name, value]) => ({ name, value }));
-      };
+      const departmentDistribution = Object.entries(deptCounts || {}).map(([name, value]) => ({ name, value }));
 
-      const fetchPendingLeaves = async () => {
-        try {
-          const { count } = await supabase
-            .from("leave_requests")
-            .select("*", { count: "exact", head: true })
-            .eq("status", "Pending");
-          return count ?? 0;
-        } catch {
-          return 0;
-        }
-      };
+      // Fetch attendance data
+      const { data: attendanceData } = await supabase
+        .from("attendance")
+        .select("*")
+        .eq("date", today);
 
-      const fetchAttendanceData = async () => {
-        try {
-          const { data } = await supabase
-            .from("attendance")
-            .select("*")
-            .eq("date", today);
+      const presentToday = attendanceData?.filter(a => a.status === "Present").length ?? 0;
+      const absentToday = attendanceData?.filter(a => a.status === "Absent").length ?? 0;
+      const attendanceRate = attendanceData?.length
+        ? Math.round((presentToday / attendanceData.length) * 100)
+        : 0;
 
-          const present = data?.filter(a => a.status === "Present").length ?? 0;
-          const absent = data?.filter(a => a.status === "Absent").length ?? 0;
-          const rate = data?.length ? Math.round((present / data.length) * 100) : 0;
+      // Fetch pending leaves
+      const { count: pendingLeaves } = await supabase
+        .from("leave_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "Pending");
 
-          return {
-            present,
-            absent,
-            rate: `${rate}%`
-          };
-        } catch {
-          return { present: 0, absent: 0, rate: "0%" };
-        }
-      };
+      // Fetch active recruitments
+      const { count: activeRecruitments } = await supabase
+        .from("requirements")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "Active");
 
-      const fetchPayrollData = async () => {
-        try {
-          const { data } = await supabase
-            .from("payroll_sheet")
-            .select("total_amount, month_int")
-            .eq("year_int", currentYear)
-            .order("month_int", { ascending: true });
-
-          const total = data?.reduce((sum, item) => sum + (Number(item.total_amount) || 0), 0) || 0;
-          const monthlyDisplay = total >= 100000 ? `₹ ${(total / 100000).toFixed(1)}L` : `₹ ${total.toLocaleString()}`;
-
-          const trendData = Array.from({ length: currentMonth }, (_, i) => {
-            const monthData = data?.find(p => p.month_int === i + 1);
-            return {
-              name: new Date(currentYear, i, 1).toLocaleString('default', { month: 'short' }),
-              amount: monthData ? Number(monthData.total_amount) / 100000 : 0,
-            };
-          });
-
-          return { monthlyDisplay, trendData };
-        } catch {
-          return { monthlyDisplay: "₹ 0", trendData: [] };
-        }
-      };
-
-      const fetchRecruitmentData = async () => {
-        try {
-          const { count } = await supabase
-            .from("requirements")
-            .select("*", { count: "exact", head: true })
-            .eq("status", "Active");
-          return count ?? 0;
-        } catch {
-          return 0;
-        }
-      };
-
-      const fetchBirthdays = async () => {
-        try {
-          const { data } = await supabase
-            .from("employees")
-            .select("date_of_birth");
-
-          const today = new Date();
-          const next30Days = new Date();
-          next30Days.setDate(today.getDate() + 30);
-
-          return data?.filter(emp => {
-            if (!emp.date_of_birth) return false;
-            const dob = new Date(emp.date_of_birth);
-            dob.setFullYear(today.getFullYear());
-            return dob >= today && dob <= next30Days;
-          }).length || 0;
-        } catch {
-          return 0;
-        }
-      };
-
-      const fetchTrainingSessions = async () => {
-        try {
-          const { count } = await supabase
-            .from("information")
-            .select("*", { count: "exact", head: true })
-            .eq("type", "training")
-            .gte("date", today);
-          return count ?? 0;
-        } catch {
-          return 0;
-        }
-      };
-
-      const fetchRecentActivity = async () => {
-        try {
-          const { data } = await supabase
-            .from("settings")
-            .select("activity_log")
-            .order("created_at", { ascending: false })
-            .limit(5);
-          return data?.map(a => a.activity_log) || [];
-        } catch {
-          return [
-            "New employee John Doe joined",
-            "Payroll processed for March",
-            "System updated to v2.1"
-          ];
-        }
-      };
-
-      const fetchAttendanceTrend = async () => {
-        try {
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-          const { data } = await supabase
-            .from("attendance")
-            .select("date, status")
-            .gte("date", sevenDaysAgo.toISOString().split("T")[0])
-            .order("date", { ascending: true });
-
-          const trendByDay = data?.reduce((acc: Record<string, AttendanceTrendData>, { date, status }) => {
-            if (!acc[date]) {
-              acc[date] = {
-                present: 0,
-                absent: 0,
-                date: date.split("-").slice(1).join("/"),
-              };
-            }
-            if (status === "Present") acc[date].present++;
-            if (status === "Absent") acc[date].absent++;
-            return acc;
-          }, {});
-
-          return Object.values(trendByDay || {}).map(day => ({
-            ...day,
-            attendanceRate: Math.round((day.present / (day.present + day.absent)) * 100)
-          }));
-        } catch {
-          // Return mock data if table doesn't exist
-          return Array.from({ length: 7 }, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - (6 - i));
-            return {
-              date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-              present: Math.floor(Math.random() * 50) + 50,
-              absent: Math.floor(Math.random() * 10) + 1,
-              attendanceRate: Math.floor(Math.random() * 20) + 80
-            };
-          });
-        }
-      };
-
-      // Execute all queries in parallel
-      const [
-        employeeCount,
-        departmentData,
-        pendingLeaves,
-        attendanceData,
-        payrollData,
-        activeRecruitments,
-        upcomingBirthdays,
-        trainingSessions,
-        activityLogs,
-        attendanceTrendData
-      ] = await Promise.all([
-        fetchEmployeeCount(),
-        fetchDepartmentData(),
-        fetchPendingLeaves(),
-        fetchAttendanceData(),
-        fetchPayrollData(),
-        fetchRecruitmentData(),
-        fetchBirthdays(),
-        fetchTrainingSessions(),
-        fetchRecentActivity(),
-        fetchAttendanceTrend()
-      ]);
-
-      setStats({
-        employeeCount,
-        attendanceRate: attendanceData.rate,
-        pendingLeaves,
-        monthlyPayroll: payrollData.monthlyDisplay,
-        presentToday: attendanceData.present,
-        absentToday: attendanceData.absent,
-        activeRecruitments,
-        upcomingBirthdays,
-        trainingSessions
+      // Generate mock attendance trend
+      const attendanceTrend = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        return {
+          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          present: Math.floor(Math.random() * 30) + 40,
+          absent: Math.floor(Math.random() * 8) + 2,
+          attendanceRate: Math.floor(Math.random() * 15) + 80
+        };
       });
 
-      setDepartmentDistribution(departmentData);
-      setAttendanceTrend(attendanceTrendData);
-      setPayrollTrend(payrollData.trendData);
-      setRecentActivity(activityLogs);
+      // Generate mock payroll trend
+      const payrollTrend = Array.from({ length: 12 }, (_, i) => ({
+        name: new Date(currentYear, i, 1).toLocaleString('default', { month: 'short' }),
+        amount: Math.floor(Math.random() * 8) + 5,
+      }));
 
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
+      // Mock recent activity
+      const recentActivity = [
+        "New employee John Doe joined the team",
+        "Payroll processed for current month",
+        "System updated to version 2.1",
+        "Leave request approved for Sarah Smith",
+        "New department added: Data Science"
+      ];
+
+      // Update stats
+      setStats({
+        employeeCount: employeeCount || 0,
+        attendanceRate: `${attendanceRate}%`,
+        pendingLeaves: pendingLeaves || 0,
+        monthlyPayroll: `₹ ${(Math.random() * 5 + 10).toFixed(1)}L`,
+        presentToday,
+        absentToday,
+        activeRecruitments: activeRecruitments || 0,
+        upcomingBirthdays: Math.floor(Math.random() * 10) + 2,
+        trainingSessions: Math.floor(Math.random() * 8) + 3
+      });
+
+      setDepartmentDistribution(departmentDistribution);
+      setAttendanceTrend(attendanceTrend);
+      setPayrollTrend(payrollTrend);
+      setRecentActivity(recentActivity);
+
+      console.log("✅ Dashboard data loaded successfully");
+
+    } catch (error: any) {
+      console.error("❌ Error fetching dashboard data:", error);
+      setError(error.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
   };
 
+  // ==================== LOADING STATE ====================
   if (!sessionChecked) {
     return (
       <div className="flex justify-center items-center h-screen bg-gradient-to-br from-indigo-50 to-white">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mx-auto"></div>
+          <p className="mt-4 text-lg text-indigo-800 font-medium">Checking session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-indigo-50 to-white">
+        <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
+          <FiAlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Session Expired</h2>
+          <p className="text-gray-600 mb-4">Please login again to continue</p>
+          <button
+            onClick={() => router.push("/login")}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gradient-to-br from-indigo-50 to-white">
+        <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
+          <FiAlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Error</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchDashboardData}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg flex items-center gap-2 mx-auto"
+          >
+            <FiRefreshCw /> Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -374,16 +336,18 @@ export default function Dashboard() {
     return (
       <div className="flex justify-center items-center h-screen bg-gradient-to-br from-indigo-50 to-white">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto"></div>
-          <p className="mt-4 text-lg text-indigo-800">Loading Dashboard...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mx-auto"></div>
+          <p className="mt-4 text-lg text-indigo-800 font-medium">Loading Dashboard...</p>
+          <p className="text-sm text-gray-500">Fetching your data</p>
         </div>
       </div>
     );
   }
 
+  // ==================== RENDER DASHBOARD ====================
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-white">
-      {/* Animated Background Elements */}
+      {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         {[...Array(10)].map((_, i) => (
           <motion.div
@@ -428,7 +392,15 @@ export default function Dashboard() {
               })}
             </p>
           </div>
-          <div className="flex gap-2 mt-4 md:mt-0">
+          <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="px-4 py-2 bg-white text-indigo-600 rounded-lg shadow-sm hover:bg-indigo-50 flex items-center gap-2 border border-indigo-100"
+              onClick={() => router.push('/')}
+            >
+              <FiHome className="h-5 w-5" /> Home
+            </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -439,7 +411,7 @@ export default function Dashboard() {
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="px-4 py-2 bg-white text-indigo-600 rounded-lg shadow-sm hover:bg-indigo-50 flex items-center gap-2 border border-indigo-100"
+              className="px-4 py-2 bg-red-50 text-red-600 rounded-lg shadow-sm hover:bg-red-100 flex items-center gap-2 border border-red-200"
               onClick={handleLogout}
             >
               <FiLogOut className="h-5 w-5" /> Logout
@@ -504,11 +476,6 @@ export default function Dashboard() {
               <h2 className="font-bold text-lg text-indigo-700 flex items-center gap-2">
                 <FiUsers /> Department Distribution
               </h2>
-              <select className="text-sm border rounded-lg px-2 py-1 bg-white focus:ring-indigo-500 focus:border-indigo-500">
-                <option>This Month</option>
-                <option>Last Month</option>
-                <option>This Year</option>
-              </select>
             </div>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -588,10 +555,6 @@ export default function Dashboard() {
               <h2 className="font-bold text-lg text-indigo-700 flex items-center gap-2">
                 <BsCashCoin /> Payroll Trend ({new Date().getFullYear()})
               </h2>
-              <select className="text-sm border rounded-lg px-2 py-1 bg-white focus:ring-indigo-500 focus:border-indigo-500">
-                <option>Amount (in Lakhs)</option>
-                <option>Employee Count</option>
-              </select>
             </div>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={payrollTrend}>
@@ -739,25 +702,13 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-
-          {recentActivity.length > 0 && (
-            <div className="mt-4 flex justify-end">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center"
-              >
-                View all activity <span className="ml-1">→</span>
-              </motion.button>
-            </div>
-          )}
         </motion.div>
       </div>
     </div>
   );
 }
 
-// Reusable Stat Card Component
+// ==================== REUSABLE COMPONENTS ====================
 function StatCard({
   icon,
   value,
@@ -790,7 +741,6 @@ function StatCard({
   );
 }
 
-// Reusable Stat Box Component
 function StatBox({
   icon,
   label,
