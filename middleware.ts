@@ -1,26 +1,46 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse, type NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
-  const token = request.cookies.get('sb-access-token')?.value;
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
 
-  // अगर लॉगिन नहीं है तो redirect करो login page पर
-  if (!token && !request.nextUrl.pathname.startsWith('/login')) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  const supabase = createMiddlewareClient({
+    req,
+    res,
+  });
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const pathname = req.nextUrl.pathname;
+
+  // Public routes
+  const publicRoutes = ["/login", "/forgot-password"];
+
+  // Not logged in -> Login
+  if (!session && !publicRoutes.includes(pathname)) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  return NextResponse.next();
+  // Logged in -> Login page se dashboard
+  if (session && pathname === "/login") {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  return res;
 }
 
 export const config = {
   matcher: [
-    '/dashboard',
-    '/employees/:path*',
-    '/attendance',
-    '/payroll',
-    '/settings',
-    '/performance',
-    '/recruitment',
-    // और भी secure pages add कर सकते हो
+    "/dashboard/:path*",
+    "/employees/:path*",
+    "/attendance/:path*",
+    "/payroll/:path*",
+    "/performance/:path*",
+    "/recruitment/:path*",
+    "/salary_slips/:path*",
+    "/login",
+    "/forgot-password",
   ],
 };
